@@ -46,3 +46,15 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+# Local environment configuration
+.env
+.env.*
+!.env.example
+
+# Local backup files
+*.dart.backup
+*.bak
+
+# Local secrets
+*.pem
+*.key
