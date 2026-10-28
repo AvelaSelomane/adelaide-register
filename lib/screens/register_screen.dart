@@ -332,14 +332,17 @@ Future<void> _downloadPdfReport() async {
                             : _adminView()
                       else
                         _visitorView(),
-                      const SizedBox(height: 24),
+                      
                       const Center(
                         child: Text(
-                          'CLEARPASS  •  Adelaide Tambo Library'
-                          '  •  Demonstration',
-                          style: TextStyle(fontSize: 11, color: muted),
+                          'Adelaide Tambo Public Library  •  Demonstration',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: muted,
+                          ),
                         ),
                       ),
+
                     ],
                   ),
                 ),
@@ -351,62 +354,52 @@ Future<void> _downloadPdfReport() async {
     );
   }
 
-  Widget _header() {
-    return _panel(
-      Row(
-        children: [
-          Container(
-            height: 48,
-            width: 48,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7187FF), Color(0xFF4355DC)],
-              ),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: const Icon(Icons.local_library_rounded, color: Colors.white),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ClearPass',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
-                  ),
-                ),
-                Text(
-                  'ADELAIDE TAMBO LIBRARY',
-                  style: TextStyle(fontSize: 10, color: muted),
-                ),
-              ],
+  
+Widget _header() {
+  return _panel(
+    Row(
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Image.asset(
+              'assets/images/adelaide_tambo_logo.png',
+              height: 48,
+              fit: BoxFit.contain,
+              alignment: Alignment.centerLeft,
             ),
           ),
-          FilledButton.tonalIcon(
-            onPressed: () {
-              setState(() {
-                _showAdmin = !_showAdmin;
-                if (!_showAdmin) {
-                  _adminToken = null;
-                  _adminStatistics = null;
-                  _statisticsError = null;
-                  _statisticsLoading = false;
-                }
-              });
-            },
-            icon: Icon(
-              _showAdmin ? Icons.assignment_rounded : Icons.dashboard_rounded,
-            ),
-            label: Text(_showAdmin ? 'Visitor registration' : 'Supervisor login'),
+        ),
+        const SizedBox(width: 12),
+        FilledButton.tonalIcon(
+          onPressed: () {
+            setState(() {
+              _showAdmin = !_showAdmin;
+
+              if (!_showAdmin) {
+                _adminToken = null;
+                _adminStatistics = null;
+                _statisticsError = null;
+                _statisticsLoading = false;
+              }
+            });
+          },
+          icon: Icon(
+            _showAdmin
+                ? Icons.assignment_rounded
+                : Icons.dashboard_rounded,
           ),
-        ],
-      ),
-    );
-  }
+          label: Text(
+            _showAdmin
+                ? 'Visitor registration'
+                : 'Supervisor login',
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 
   Widget _visitorView() {
     return Column(
