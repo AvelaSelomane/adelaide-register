@@ -342,7 +342,6 @@ Future<void> _downloadPdfReport() async {
                           ),
                         ),
                       ),
-
                     ],
                   ),
                 ),
