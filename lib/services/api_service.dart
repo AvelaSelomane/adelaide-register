@@ -1,9 +1,7 @@
-﻿
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
-
-import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 
 class ApiService {
@@ -101,137 +99,183 @@ class ApiService {
     return decoded;
   }
 
-  // Retrieve authenticated daily, monthly, or yearly statistics.
 
-static Future<Map<String, dynamic>> getAdminStatistics({
-  required String token,
-  required String period,
-  required DateTime date,
-}) async {
-  final String formattedDate =
-      '${date.year}-${date.month.toString().padLeft(2, '0')}-'
-      '${date.day.toString().padLeft(2, '0')}';
+  // Retrieve individual visitor registrations for a selected day.
+  static Future<Map<String, dynamic>> getDailyRegistrations({
+    required String token,
+    required DateTime date,
+  }) async {
+    final formattedDate =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
 
-  final Map<String, String> queryParameters;
-
-  switch (period) {
-    case 'daily':
-      queryParameters = {
-        'period': 'daily',
-        'date': formattedDate,
-      };
-      break;
-
-    case 'monthly':
-      queryParameters = {
-        'period': 'monthly',
-        'year': date.year.toString(),
-        'month': date.month.toString(),
-      };
-      break;
-
-    case 'yearly':
-      queryParameters = {
-        'period': 'yearly',
-        'year': date.year.toString(),
-      };
-      break;
-
-    default:
-      throw ArgumentError(
-        'Period must be daily, monthly, or yearly',
-      );
-  }
-
-  final uri = Uri.parse('$baseUrl/admin/statistics').replace(
-    queryParameters: queryParameters,
-  );
-
-  final response = await http
-      .get(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      )
-      .timeout(const Duration(seconds: 15));
-
-  final decoded = jsonDecode(response.body);
-
-  if (decoded is! Map<String, dynamic>) {
-    throw Exception('Unexpected statistics response');
-  }
-
-  if (response.statusCode != 200 || decoded['success'] != true) {
-    throw Exception(
-      decoded['message'] ?? 'Unable to load attendance statistics',
+    final uri = Uri.parse(
+      '$baseUrl/admin/registrations',
+    ).replace(
+      queryParameters: {'date': formattedDate},
     );
-  }
 
-  return decoded;
-}
+    final response = await http
+        .get(
+          uri,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        )
+        .timeout(const Duration(seconds: 15));
 
+    final decoded = jsonDecode(response.body);
 
-static Future<void> downloadAdminPdfReport({
-  required String token,
-  required String period,
-  required DateTime date,
-}) async {
-  if (period != 'monthly' && period != 'yearly') {
-    throw ArgumentError('PDF reports must be monthly or yearly');
-  }
-
-  final queryParameters = <String, String>{
-    'year': date.year.toString(),
-    if (period == 'monthly')
-      'month': date.month.toString(),
-  };
-
-  final uri = Uri.parse(
-    '$baseUrl/admin/reports/$period',
-  ).replace(queryParameters: queryParameters);
-
-  final response = await http.get(
-    uri,
-    headers: {
-      'Authorization': 'Bearer $token',
-      'Accept': 'application/pdf',
-    },
-  ).timeout(const Duration(seconds: 60));
-
-  if (response.statusCode != 200) {
-    String message = 'Unable to download PDF report';
-
-    try {
-      final decoded = jsonDecode(response.body);
-      if (decoded is Map<String, dynamic>) {
-        message = decoded['message']?.toString() ?? message;
-      }
-    } catch (_) {
-      // Keep the default error message.
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Unexpected server response');
     }
 
-    throw Exception(message);
+    if (response.statusCode != 200 ||
+        decoded['success'] != true) {
+      throw Exception(
+        decoded['message']?.toString() ??
+            'Unable to load daily registrations',
+      );
+    }
+
+    return decoded;
   }
 
-  final contentType =
-      response.headers['content-type']?.toLowerCase() ?? '';
 
-  if (!contentType.contains('application/pdf')) {
-    throw Exception('Server did not return a PDF file');
+  // Retrieve authenticated daily, monthly, or yearly statistics.
+  static Future<Map<String, dynamic>> getAdminStatistics({
+    required String token,
+    required String period,
+    required DateTime date,
+  }) async {
+    final String formattedDate =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+
+    final Map<String, String> queryParameters;
+
+    switch (period) {
+      case 'daily':
+        queryParameters = {
+          'period': 'daily',
+          'date': formattedDate,
+        };
+        break;
+
+      case 'monthly':
+        queryParameters = {
+          'period': 'monthly',
+          'year': date.year.toString(),
+          'month': date.month.toString(),
+        };
+        break;
+
+      case 'yearly':
+        queryParameters = {
+          'period': 'yearly',
+          'year': date.year.toString(),
+        };
+        break;
+
+      default:
+        throw ArgumentError(
+          'Period must be daily, monthly, or yearly',
+        );
+    }
+
+    final uri = Uri.parse('$baseUrl/admin/statistics').replace(
+      queryParameters: queryParameters,
+    );
+
+    final response = await http
+        .get(
+          uri,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        )
+        .timeout(const Duration(seconds: 15));
+
+    final decoded = jsonDecode(response.body);
+
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Unexpected statistics response');
+    }
+
+    if (response.statusCode != 200 || decoded['success'] != true) {
+      throw Exception(
+        decoded['message'] ?? 'Unable to load attendance statistics',
+      );
+    }
+
+    return decoded;
   }
 
-  final filename = period == 'monthly'
-      ? 'ClearPass_Monthly_${date.year}_${date.month.toString().padLeft(2, '0')}'
-      : 'ClearPass_Yearly_${date.year}';
+  // Download monthly or yearly PDF reports.
+  static Future<void> downloadAdminPdfReport({
+    required String token,
+    required String period,
+    required DateTime date,
+  }) async {
+    if (period != 'monthly' && period != 'yearly') {
+      throw ArgumentError('PDF reports must be monthly or yearly');
+    }
 
-  await FileSaver.instance.saveFile(
-    name: filename,
-    bytes: Uint8List.fromList(response.bodyBytes),
-    fileExtension: 'pdf',
-    mimeType: MimeType.pdf,
-  );
-}
+    final queryParameters = <String, String>{
+      'year': date.year.toString(),
+      if (period == 'monthly')
+        'month': date.month.toString(),
+    };
 
+    final uri = Uri.parse(
+      '$baseUrl/admin/reports/$period',
+    ).replace(queryParameters: queryParameters);
+
+    final response = await http
+        .get(
+          uri,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/pdf',
+          },
+        )
+        .timeout(const Duration(seconds: 60));
+
+    if (response.statusCode != 200) {
+      String message = 'Unable to download PDF report';
+
+      try {
+        final decoded = jsonDecode(response.body);
+
+        if (decoded is Map<String, dynamic>) {
+          message = decoded['message']?.toString() ?? message;
+        }
+      } catch (_) {
+        // Keep the default error message.
+      }
+
+      throw Exception(message);
+    }
+
+    final contentType =
+        response.headers['content-type']?.toLowerCase() ?? '';
+
+    if (!contentType.contains('application/pdf')) {
+      throw Exception('Server did not return a PDF file');
+    }
+
+    // Professional Adelaide Tambo PDF filenames.
+    final filename = period == 'monthly'
+        ? 'Adelaide_Tambo_Monthly_${date.year}_${date.month.toString().padLeft(2, '0')}'
+        : 'Adelaide_Tambo_Yearly_${date.year}';
+
+    await FileSaver.instance.saveFile(
+      name: filename,
+      bytes: Uint8List.fromList(response.bodyBytes),
+      fileExtension: 'pdf',
+      mimeType: MimeType.pdf,
+    );
+  }
 }
