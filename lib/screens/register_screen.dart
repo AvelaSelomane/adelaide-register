@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'admin_login_screen.dart';
 
-// ClearPass visitor registration and authenticated supervisor reporting.
+// Adelaide Tambo visitor registration and authenticated supervisor reporting.
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -61,7 +61,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _contactController = TextEditingController();
   final _visitorCountController = TextEditingController(text: '1');
 
   final List<_AttendanceRecord> _records = [];
@@ -71,7 +70,6 @@ class _RegisterPageState extends State<RegisterPage> {
       for (final activity in group) activity: 0,
   };
 
-  bool _consent = false;
   bool _showAdmin = false;
   String? _adminToken;
   String _statisticsPeriod = 'daily';
@@ -79,6 +77,11 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _statisticsLoading = false;
   bool _pdfDownloading = false;
   String? _statisticsError;
+
+  // Daily visitor register
+  List<dynamic> _dailyRegistrations = [];
+  bool _dailyRegistrationsLoading = false;
+  String? _dailyRegistrationsError;
   bool _isSaving = false;
   DateTime _now = DateTime.now();
   Timer? _clock;
@@ -98,7 +101,6 @@ class _RegisterPageState extends State<RegisterPage> {
   void dispose() {
     _clock?.cancel();
     _nameController.dispose();
-    _contactController.dispose();
     _visitorCountController.dispose();
     super.dispose();
   }
@@ -184,9 +186,7 @@ class _RegisterPageState extends State<RegisterPage> {
         );
 
         _nameController.clear();
-        _contactController.clear();
         _visitorCountController.text = '1';
-        _consent = false;
 
         for (final key in _activityCounts.keys) {
           _activityCounts[key] = 0;
@@ -218,6 +218,7 @@ class _RegisterPageState extends State<RegisterPage> {
   Future<void> _loadAdminStatistics() async {
     final token = _adminToken;
     if (token == null) return;
+    final period = _statisticsPeriod;
 
     setState(() {
       _statisticsLoading = true;
@@ -227,23 +228,85 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       final result = await ApiService.getAdminStatistics(
         token: token,
-        period: _statisticsPeriod,
+        period: period,
         date: DateTime.now(),
       );
-      if (!mounted || _adminToken != token) return;
+      if (!mounted || _adminToken != token || _statisticsPeriod != period) {
+        return;
+      }
       setState(() => _adminStatistics = result);
+      if (period == 'daily') {
+        await _loadDailyRegistrations();
+      }
     } catch (error) {
-      if (!mounted || _adminToken != token) return;
+      if (!mounted || _adminToken != token || _statisticsPeriod != period) {
+        return;
+      }
       setState(() {
         _adminStatistics = null;
-        _statisticsError = 'Could not load statistics. Check the backend connection and sign in again if your session expired.';
+        _statisticsError =
+            'Could not load statistics. Check the backend connection and sign in again if your session expired.';
       });
     } finally {
-      if (mounted && _adminToken == token) {
+      if (mounted && _adminToken == token && _statisticsPeriod == period) {
         setState(() => _statisticsLoading = false);
       }
     }
   }
+
+  Future<void> _loadDailyRegistrations() async {
+  final token = _adminToken;
+
+  if (token == null || _statisticsPeriod != 'daily') {
+    return;
+  }
+
+  setState(() {
+    _dailyRegistrationsLoading = true;
+    _dailyRegistrationsError = null;
+  });
+
+  try {
+    final response = await ApiService.getDailyRegistrations(
+      token: token,
+      date: DateTime.now(),
+    );
+
+    if (!mounted ||
+        _adminToken != token ||
+        _statisticsPeriod != 'daily') {
+      return;
+    }
+
+    final registrations = response['registrations'];
+
+    if (registrations is! List) {
+      throw Exception('Invalid daily registrations response');
+    }
+
+    setState(() {
+      _dailyRegistrations = registrations;
+    });
+  } catch (error) {
+    if (!mounted ||
+        _adminToken != token ||
+        _statisticsPeriod != 'daily') {
+      return;
+    }
+
+    setState(() {
+      _dailyRegistrations = [];
+      _dailyRegistrationsError =
+          'Unable to load daily registrations: $error';
+    });
+  } finally {
+    if (mounted && _adminToken == token) {
+      setState(() {
+        _dailyRegistrationsLoading = false;
+      });
+    }
+  }
+}
 
 Future<void> _downloadPdfReport() async {
   final token = _adminToken;
@@ -325,6 +388,8 @@ Future<void> _downloadPdfReport() async {
                                     _adminToken = token;
                                     _statisticsPeriod = 'daily';
                                     _adminStatistics = null;
+                                    _dailyRegistrations = [];
+                                    _dailyRegistrationsError = null;
                                   });
                                   _loadAdminStatistics();
                                 },
@@ -342,7 +407,6 @@ Future<void> _downloadPdfReport() async {
                           ),
                         ),
                       ),
-
                     ],
                   ),
                 ),
@@ -381,6 +445,9 @@ Widget _header() {
                 _adminStatistics = null;
                 _statisticsError = null;
                 _statisticsLoading = false;
+                _dailyRegistrations = [];
+                _dailyRegistrationsError = null;
+                _dailyRegistrationsLoading = false;
               }
             });
           },
@@ -523,92 +590,52 @@ Widget _header() {
             ),
             const SizedBox(height: 18),
             _label('NUMBER OF VISITORS *'),
-            TextFormField(
-              controller: _visitorCountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.groups_outlined),
-                hintText: 'e.g. 5',
-              ),
-              validator: (value) {
-                final number = int.tryParse(value?.trim() ?? '');
-                if (number == null || number < 1) {
-                  return 'Enter a whole number '
-                      'of at least 1';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 18),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.08),
-                border: Border.all(color: accent.withValues(alpha: 0.22)),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: _consent,
-                    activeColor: accent,
-                    onChanged: (value) {
+            Row(
+              children: [
+                IconButton.filledTonal(
+                  tooltip: 'Remove one visitor',
+                  onPressed: () {
+                    final current =
+                        int.tryParse(_visitorCountController.text) ?? 1;
+                    if (current > 1) {
                       setState(() {
-                        _consent = value ?? false;
-                        if (!_consent) {
-                          _contactController.clear();
-                        }
+                        _visitorCountController.text = (current - 1).toString();
                       });
+                    }
+                  },
+                  icon: const Icon(Icons.remove),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _visitorCountController,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    decoration: const InputDecoration(hintText: 'e.g. 5'),
+                    validator: (value) {
+                      final number = int.tryParse(value?.trim() ?? '');
+                      if (number == null || number < 1) {
+                        return 'Enter a whole number of at least 1';
+                      }
+                      return null;
                     },
                   ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Your number, your privacy',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'I agree to provide my '
-                          'contact number so the library '
-                          'can identify my visitor record '
-                          'and update me with new '
-                          'information if needed.',
-                          style: TextStyle(fontSize: 12, height: 1.4),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                IconButton.filled(
+                  tooltip: 'Add one visitor',
+                  onPressed: () {
+                    final current =
+                        int.tryParse(_visitorCountController.text) ?? 0;
+                    setState(() {
+                      _visitorCountController.text = (current + 1).toString();
+                    });
+                  },
+                  icon: const Icon(Icons.add),
+                ),
+              ],
             ),
             const SizedBox(height: 18),
-            _label('CONTACT NUMBER (WITH CONSENT)'),
-            TextFormField(
-              controller: _contactController,
-              enabled: _consent,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                hintText: 'Enter your contact number',
-                prefixIcon: Icon(Icons.phone_outlined),
-              ),
-              validator: (value) {
-                if (!_consent) return null;
-
-                final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
-
-                if (digits.length < 7) {
-                  return 'Enter a valid contact number';
-                }
-                return null;
-              },
-            ),
             const SizedBox(height: 20),
             const Text(
               'ACTIVITY COUNTS',
@@ -644,7 +671,7 @@ Widget _header() {
                           style: const TextStyle(fontSize: 13),
                         ),
                       ),
-                      IconButton(
+                      IconButton.filledTonal(
                         tooltip: 'Remove one $activity visitor',
                         onPressed: _activityCounts[activity]! > 0
                             ? () {
@@ -654,16 +681,21 @@ Widget _header() {
                                 });
                               }
                             : null,
-                        icon: const Icon(Icons.remove_circle_outline),
+                        icon: const Icon(Icons.remove),
                       ),
                       SizedBox(
-                        width: 26,
+                        width: 36,
                         child: Text(
                           '${_activityCounts[activity]}',
                           textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: ink,
+                          ),
                         ),
                       ),
-                      IconButton(
+                      IconButton.filled(
                         tooltip: 'Add one $activity visitor',
                         onPressed: () {
                           setState(() {
@@ -671,10 +703,7 @@ Widget _header() {
                                 _activityCounts[activity]! + 1;
                           });
                         },
-                        icon: const Icon(
-                          Icons.add_circle_outline,
-                          color: accent,
-                        ),
+                        icon: const Icon(Icons.add),
                       ),
                     ],
                   ),
@@ -800,7 +829,13 @@ Widget _header() {
                     ? null
                     : (period) {
                         if (period == null) return;
-                        setState(() => _statisticsPeriod = period);
+                        setState(() {
+                          _statisticsPeriod = period;
+                          _adminStatistics = null;
+                          _statisticsError = null;
+                          _dailyRegistrations = [];
+                          _dailyRegistrationsError = null;
+                        });
                         _loadAdminStatistics();
                       },
               ),
@@ -891,9 +926,113 @@ if (_statisticsPeriod == 'monthly' || _statisticsPeriod == 'yearly')
             ),
           ),
         ],
+        if (_statisticsPeriod == 'daily' && _adminToken != null) ...[
+          const SizedBox(height: 20),
+          _dailyVisitorRegister(),
+        ],
       ],
     );
   }
+
+  Widget _dailyVisitorRegister() {
+  return _panel(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Daily Visitor Register',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: ink,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Individual visitor registrations recorded today.',
+          style: TextStyle(fontSize: 12, color: muted),
+        ),
+        const SizedBox(height: 16),
+
+        if (_dailyRegistrationsLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (_dailyRegistrationsError != null)
+          Text(
+            _dailyRegistrationsError!,
+            style: const TextStyle(color: Colors.deepOrange),
+          )
+        else if (_dailyRegistrations.isEmpty)
+          const Text(
+            'No visitor registrations found for today.',
+            style: TextStyle(color: muted),
+          )
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('Time')),
+                DataColumn(label: Text('Initials & Surname')),
+                DataColumn(label: Text('Visitors')),
+                DataColumn(label: Text('Activities')),
+              ],
+              rows: _dailyRegistrations.map((item) {
+                final registration = item is Map
+                    ? Map<String, dynamic>.from(item)
+                    : <String, dynamic>{};
+
+                final rawDate = registration['registeredAt'];
+                final registeredAt = DateTime.tryParse(
+                  rawDate?.toString() ?? '',
+                )?.toLocal();
+
+                final time = registeredAt == null
+                    ? '-'
+                    : '${registeredAt.hour.toString().padLeft(2, '0')}:'
+                      '${registeredAt.minute.toString().padLeft(2, '0')}';
+
+                final rawActivities = registration['activities'];
+                final activities = rawActivities is List
+                    ? rawActivities
+                    : <dynamic>[];
+
+                final activitySummary = activities.map((activity) {
+                  final data = activity is Map
+                      ? Map<String, dynamic>.from(activity)
+                      : <String, dynamic>{};
+
+                  return '${data['activityName']}: '
+                      '${data['visitorCount']}';
+                }).join(', ');
+
+                return DataRow(
+                  cells: [
+                    DataCell(Text(time)),
+                    DataCell(Text(
+                      registration['initialsSurname']?.toString() ?? '-',
+                    )),
+                    DataCell(Text(
+                      registration['visitorCount']?.toString() ?? '0',
+                    )),
+                    DataCell(
+                      SizedBox(
+                        width: 320,
+                        child: Text(
+                          activitySummary,
+                          softWrap: true,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
 
   Widget _stat(String label, String value, IconData icon) {
     return SizedBox(
